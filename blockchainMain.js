@@ -1,16 +1,35 @@
 var SHA256 = require('crypto-js/sha256');
-	
+    
+class Transaction {
+    constructor (fromAddress, toAddress, amount) {
+        this.fromAddress = fromAddress;
+        this.toAddress  = toAddress;
+        this.amount = amount;
+    }
+}
+
 class Block {
-    constructor (index, timestamp, data, previousHash = '') {
-        this.index = index;
+    constructor (timestamp, transactions, previousHash = '') {
         this.timestamp = timestamp;
-        this.data = data;
+        this.transactions = transactions;
         this.previousHash = previousHash;
         this.hash = this.calculateHash();
+        this.nonce = 0;     // Random number that is the only thing that can change in the block
     }
 
     calculateHash() {
-        return SHA256(this.index + this.previousHash + this.timestamp + JSON.stringify(this.data)).toString();
+        return SHA256(this.previousHash + this.timestamp + JSON.stringify(this.transactions) + this.nonce).toString();
+    }
+
+    mineBlock(difficulty) {
+        
+        // Array(difficulty +1).join("0") creates a String with (difficult+1) amount of zeros
+        while(this.hash.substring(0, difficulty) !== Array(difficulty + 1).join("0"))  { // if difficulty is 5 -> this gets the first 5 chars of the hash
+            this.hash = this.calculateHash();
+            this.nonce++;
+        }
+
+        console.log("Block mined: " + this.hash);
     }
 }
 
@@ -18,22 +37,53 @@ class Blockchain {
 
     constructor () {
         this.chain = [this.createGenesisBlock()];
+        this.difficulty = 2;    // set Difficulty
+        this.pendingTransactions = [];
+        this.miningReward = 100;
     }
 
     createGenesisBlock() {
-        return new Block(0, new Date(1990, 6), "Genesis block", "0");
+        return new Block(new Date(1990, 6), "Genesis block", "0");
     }
 
     getLatestBlock () {
         return this.chain[this.chain.length - 1];
     }
 
-    addBlock(newBlock) {
-        newBlock.previousHash = this.getLatestBlock().hash;
-        newBlock.hash = newBlock.calculateHash();
-        this.chain.push(newBlock);
+    minePendingTransaction (miningRewardAddress) {
+        let block = new Block(Date.now(), this.pendingTransactions);    // normally you wouldnt pend all Transactions and miners choose which to include and which not
+        block.mineBlock(this.difficulty);
+
+        console.log("Block Successfully mined");
+        this.chain.push(block);
+
+        this.pendingTransactions = [
+            new Transaction(null, miningRewardAddress, this.miningReward)
+        ];
     }
 
+    createTransaction (transaction) {
+        this.pendingTransactions.push(transaction);
+    }
+
+    getBalanceOfAddress (address) {
+        let balance = 0;
+
+        for (const block of this.chain) {
+            for (const trans of block.transactions) {
+                if (trans.fromAddress === address) {
+                    balance -= trans.amount;
+                }
+
+                if (trans.toAddress === address) {
+                    balance += trans.amount;
+                }
+            }
+        }
+
+        return balance;
+    }
+    
     isChainValid () {
         for (var i = 1; i < this.chain.length; i++) {
             
@@ -55,12 +105,15 @@ class Blockchain {
 
 var bChain = new Blockchain();
 
-bChain.addBlock(new Block(1, new Date(1990, 5), 30));
-bChain.addBlock(new Block(2, new Date(1990, 6), 40));
+bChain.createTransaction(new Transaction('Address1', 'Address2', 4));
+bChain.createTransaction(new Transaction('Address2', 'Address1', 5));
 
-console.log("is valid? " + bChain.isChainValid());
+console.log("\n Starting Mining ... ");
+bChain.minePendingTransaction("my Address");
 
-bChain.chain[1].data = 500;
-bChain.chain[1].hash = bChain.chain[1].calculateHash();
+console.log("\n Balance of my Account is ", bChain.getBalanceOfAddress("my Address"));
 
-console.log("is valid?" + bChain.isChainValid());
+console.log("\n Starting the Mining again ...");
+bChain.minePendingTransaction("my Address");
+
+console.log("\n Balance of my Account is ", bChain.getBalanceOfAddress("my Address"));
